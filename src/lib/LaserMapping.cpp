@@ -58,16 +58,17 @@ LaserMapping::LaserMapping(const float& scanPeriod,
         _maxIterations(maxIterations),
         _deltaTAbort(0.05),
         _deltaRAbort(0.05),
-        _laserCloudCenWidth(10),
+        _laserCloudCenWidth(10),//所有子cube中心
         _laserCloudCenHeight(5),
         _laserCloudCenDepth(10),
-        _laserCloudWidth(21),
+        _laserCloudWidth(21),//子cube沿宽方向的分割个数，每个子cube 50mm =1m/20
         _laserCloudHeight(11),
         _laserCloudDepth(21),
-        _laserCloudNum(_laserCloudWidth * _laserCloudHeight * _laserCloudDepth),
+        _laserCloudNum(_laserCloudWidth * _laserCloudHeight * _laserCloudDepth),//子cube总数
         _laserCloudCornerLast(new pcl::PointCloud<pcl::PointXYZI>()),
         _laserCloudSurfLast(new pcl::PointCloud<pcl::PointXYZI>()),
         _laserCloudFullRes(new pcl::PointCloud<pcl::PointXYZI>()),
+        _laserCloudAcumulated(new pcl::PointCloud<pcl::PointXYZI>()),
         _laserCloudCornerStack(new pcl::PointCloud<pcl::PointXYZI>()),
         _laserCloudSurfStack(new pcl::PointCloud<pcl::PointXYZI>()),
         _laserCloudCornerStackDS(new pcl::PointCloud<pcl::PointXYZI>()),
@@ -473,28 +474,29 @@ void LaserMapping::process()
 
   pcl::PointXYZI pointSel;
 
-  // relate incoming data to map
+  // relate incoming data to map将相关坐标转移到世界坐标系下->得到可用于建图的Lidar坐标
   transformAssociateToMap();
-
+  // 将上一时刻所有边特征转到世界坐标系下
   size_t laserCloudCornerLastNum = _laserCloudCornerLast->points.size();
   for (int i = 0; i < laserCloudCornerLastNum; i++) {
     pointAssociateToMap(_laserCloudCornerLast->points[i], pointSel);
     _laserCloudCornerStack->push_back(pointSel);
   }
-
+  // 将上一时刻所有面特征转到世界坐标系下
   size_t laserCloudSurfLastNum = _laserCloudSurfLast->points.size();
   for (int i = 0; i < laserCloudSurfLastNum; i++) {
     pointAssociateToMap(_laserCloudSurfLast->points[i], pointSel);
     _laserCloudSurfStack->push_back(pointSel);
   }
 
-
-  pcl::PointXYZI pointOnYAxis;
+  //这部分就不是那么友好了，各种变量都是什么鬼！一脸懵逼...作者的代码坑是真大
+  pcl::PointXYZI pointOnYAxis;//当前Lidar坐标系{L}y轴上的一点(0,10,0)
   pointOnYAxis.x = 0.0;
   pointOnYAxis.y = 10.0;
   pointOnYAxis.z = 0.0;
-  pointAssociateToMap(pointOnYAxis, pointOnYAxis);
-
+  pointAssociateToMap(pointOnYAxis, pointOnYAxis);//转到世界坐标系{W}下
+  // 前估计的Lidar位姿_transformTobeMapped.pos 属于哪个子cube。I、J、K对应了cube中心位置索引,
+  // 当坐标属于[-25,25]时，cube对应与(10,5,10)即正中心的那个cube?
   int centerCubeI = int((_transformTobeMapped.pos.x() + 25.0) / 50.0) + _laserCloudCenWidth;
   int centerCubeJ = int((_transformTobeMapped.pos.y() + 25.0) / 50.0) + _laserCloudCenHeight;
   int centerCubeK = int((_transformTobeMapped.pos.z() + 25.0) / 50.0) + _laserCloudCenDepth;
@@ -502,8 +504,9 @@ void LaserMapping::process()
   if (_transformTobeMapped.pos.x() + 25.0 < 0) centerCubeI--;
   if (_transformTobeMapped.pos.y() + 25.0 < 0) centerCubeJ--;
   if (_transformTobeMapped.pos.z() + 25.0 < 0) centerCubeK--;
-
+  //如果取到的子cube在整个大cube的边缘则将点对应的cube的索引向中心方向挪动一个单位，这样做主要是截取边沿cube。
   while (centerCubeI < 3) {
+    // 将点的指针向中心方向平移
     for (int j = 0; j < _laserCloudHeight; j++) {
       for (int k = 0; k < _laserCloudDepth; k++) {
       for (int i = _laserCloudWidth - 1; i >= 1; i--) {
@@ -601,13 +604,13 @@ void LaserMapping::process()
         if (i >= 0 && i < _laserCloudWidth &&
             j >= 0 && j < _laserCloudHeight &&
             k >= 0 && k < _laserCloudDepth) {
-
+          // 计算子cube对应的点坐标，由于ijk均为整数，坐标取值为中心点坐标
           float centerX = 50.0f * (i - _laserCloudCenWidth);
           float centerY = 50.0f * (j - _laserCloudCenHeight);
           float centerZ = 50.0f * (k - _laserCloudCenDepth);
 
           pcl::PointXYZI transform_pos = (pcl::PointXYZI) _transformTobeMapped.pos;
-
+          // 取邻近的8个点坐标
           bool isInLaserFOV = false;
           for (int ii = -1; ii <= 1; ii += 2) {
             for (int jj = -1; jj <= 1; jj += 2) {
@@ -795,7 +798,8 @@ void LaserMapping::optimizeTransformTobeMapped()
       pointOri = _laserCloudCornerStackDS->points[i];
       pointAssociateToMap(pointOri, pointSel);
       kdtreeCornerFromMap.nearestKSearch(pointSel, 5, pointSearchInd, pointSearchSqDis );
-
+      // 如果5个最近点中最远的距离也小于1m，认为是潜在匹配线段,构建这五个点的(x,y,z)方向的3*3的协方差矩阵，之后根据特征根来判断是否能拟合成直线。
+      //判断的方法是最大的特征根大于次大的特征根3倍。如果使用matlab，eig(cov(x,y,z)),其中的x,y,z是点云的各个分量向量。
       if (pointSearchSqDis[4] < 1.0) {
         Vector3 vc(0,0,0);
 
@@ -803,13 +807,13 @@ void LaserMapping::optimizeTransformTobeMapped()
           vc += Vector3(_laserCloudCornerFromMap->points[pointSearchInd[j]]);
         }
         vc /= 5.0;
-
+        //compute CovarianceMatrix协方差矩阵
         Eigen::Matrix3f mat_a;
         mat_a.setZero();
 
         for (int j = 0; j < 5; j++) {
           Vector3 a = Vector3(_laserCloudCornerFromMap->points[pointSearchInd[j]]) - vc;
-
+          // 5个点的协方差矩阵
           mat_a(0,0) += a.x() * a.x();
           mat_a(0,1) += a.x() * a.y();
           mat_a(0,2) += a.x() * a.z();
@@ -818,13 +822,23 @@ void LaserMapping::optimizeTransformTobeMapped()
           mat_a(2,2) += a.z() * a.z();
         }
         matA1 = mat_a / 5.0;
-
+        //compute eigenvalues and eigenvectors计算特征值，特征向量
         Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> esolver(matA1);
         matD1 = esolver.eigenvalues().real();
         matV1 = esolver.eigenvectors().real();
 
-        if (matD1(0, 2) > 3 * matD1(0, 1)) {
+        if (matD1(0, 2) > 3 * matD1(0, 1)) {//最大特征值是次大特征值的3倍以上
 
+	  /*const Eigen::Vector3f &point = pointSel.getVector3fMap();
+          Eigen::Vector3f largestEigenVect = matV1.row(0);
+          Eigen::Vector3f centroidMinus = vc.head(3) - largestEigenVect*0.1;
+          Eigen::Vector3f centroidPlus = vc.head(3) + largestEigenVect*0.1;
+
+          pcl::PointXYZI coefficients;
+          if (getCornerFeatureCoefficients(centroidMinus, centroidPlus, point, coefficients)) {
+            laserCloudOri.push_back(pointOri);
+            coeffSel.push_back(coefficients);//计算雅克比矩阵的值,i点所对应的偏导数*/
+	  
           float x0 = pointSel.x;
           float y0 = pointSel.y;
           float z0 = pointSel.z;
@@ -969,7 +983,7 @@ void LaserMapping::optimizeTransformTobeMapped()
       float arz = ((crz*srx*sry - cry*srz)*pointOri.x + (-cry*crz-srx*sry*srz)*pointOri.y)*coeff.x
                   + (crx*crz*pointOri.x - crx*srz*pointOri.y) * coeff.y
                   + ((sry*srz + cry*crz*srx)*pointOri.x + (crz*sry-cry*srx*srz)*pointOri.y)*coeff.z;
-
+      // matA 是雅克比矩阵，matAt*matA*matX = matAt*matB;
       matA(i, 0) = arx;
       matA(i, 1) = ary;
       matA(i, 2) = arz;
@@ -982,7 +996,7 @@ void LaserMapping::optimizeTransformTobeMapped()
     matAt = matA.transpose();
     matAtA = matAt * matA;
     matAtB = matAt * matB;
-    matX = matAtA.colPivHouseholderQr().solve(matAtB);
+    matX = matAtA.colPivHouseholderQr().solve(matAtB);// 其中matX是步长，（roll , ptich ,yaw,x,y,z）
 
     if (iterCount == 0) {
       Eigen::Matrix<float, 1, 6> matE;
@@ -1073,6 +1087,18 @@ void LaserMapping::publishResult()
 
   // publish transformed full resolution input cloud
   publishCloudMsg(_pubLaserCloudFullRes, *_laserCloudFullRes, _timeLaserOdometry, "/camera_init");
+ 
+  //Acculate _laserCloudFullRes
+  //*_laserCloudAcumulated += *_laserCloudFullRes;
+  //float num=_laserCloudAcumulated->size()/(_laserCloudFullRes->size()+1);
+  //std::cout<<100<<std::endl;
+  //std::cout<< "_laserCloudAcumulated/_laserCloudFullRes: "<<num <<std::endl;
+  //publishCloudMsg(_pubLaserCloudFullRes, *_laserCloudAcumulated, _timeLaserOdometry, "/camera_init");//2990621   5750190+13000
+  //pcl::PLYWriter plywriter;
+  //if(num>300&&num<302){  
+    //pcl::io::savePLYFileBinary("/media/whu/HD_CHEN_2T/02data/slam_3rd_data/loam/loam_velodyne/laserCloudAcumulated.ply", *_laserCloudAcumulated);
+    //plywriter.write<pcl::PointXYZI> ("/media/whu/HD_CHEN_2T/02data/slam_3rd_data/loam/loam_velodyne/laserCloudAcumulated.ply", *_laserCloudAcumulated,false,false);
+  //}
 
 
   // publish odometry after mapped transformations

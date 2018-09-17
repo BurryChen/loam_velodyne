@@ -205,6 +205,7 @@ void TransformMaintenance::laserOdometryHandler(const nav_msgs::Odometry::ConstP
   _laserOdometry2.pose.pose.position.y = _transformMapped[4];
   _laserOdometry2.pose.pose.position.z = _transformMapped[5];
   _pubLaserOdometry2.publish(_laserOdometry2);
+  //std::cerr << "_laserOdometry2: " << _laserOdometry2.pose.pose.position <<std::endl;
 
   _laserOdometryTrans2.stamp_ = laserOdometry->header.stamp;
   _laserOdometryTrans2.setRotation(tf::Quaternion(-geoQuat.y, -geoQuat.z, geoQuat.x, geoQuat.w));

@@ -45,6 +45,7 @@
 #include <tf/transform_broadcaster.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
+#include <pcl/io/ply_io.h>
 #include <pcl/filters/voxel_grid.h>
 
 
@@ -133,6 +134,8 @@ public:
 
   /** \brief Try to process buffered data. */
   void process();
+     
+  pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudAcumulated;  ///< Acumulated full resolution cloud
 
 
 protected:

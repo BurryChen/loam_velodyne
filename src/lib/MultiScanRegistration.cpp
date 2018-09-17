@@ -140,6 +140,7 @@ bool MultiScanRegistration::setup(ros::NodeHandle& node,
 
 void MultiScanRegistration::handleCloudMessage(const sensor_msgs::PointCloud2ConstPtr &laserCloudMsg)
 {
+  // 系统延时 SYSTEM_DELAY = 20
   if (_systemDelay > 0) {
     _systemDelay--;
     return;
@@ -159,7 +160,7 @@ void MultiScanRegistration::process(const pcl::PointCloud<pcl::PointXYZ>& laserC
 {
   size_t cloudSize = laserCloudIn.size();
 
-  // reset internal buffers and set IMU start state based on current scan time
+  // reset internal buffers and set IMU start state based on current scan time，stamp
   reset(scanTime);
 
   // determine scan start and end orientations
@@ -178,6 +179,7 @@ void MultiScanRegistration::process(const pcl::PointCloud<pcl::PointXYZ>& laserC
 
   // extract valid points from input cloud
   for (int i = 0; i < cloudSize; i++) {
+    //交换坐标系，y向前，z向左，x向上；猜测为了和单线旋转lidar一致
     point.x = laserCloudIn[i].y;
     point.y = laserCloudIn[i].z;
     point.z = laserCloudIn[i].x;
@@ -201,7 +203,7 @@ void MultiScanRegistration::process(const pcl::PointCloud<pcl::PointXYZ>& laserC
       continue;
     }
 
-    // calculate horizontal point angle
+    // calculate horizontal point angle，正切值分象限求解
     float ori = -std::atan2(point.x, point.z);
     if (!halfPassed) {
       if (ori < startOri - M_PI / 2) {

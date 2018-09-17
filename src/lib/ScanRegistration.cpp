@@ -311,6 +311,7 @@ void ScanRegistration::transformToStartIMU(pcl::PointXYZI& point)
 void ScanRegistration::interpolateIMUStateFor(const float &relTime,
                                               IMUState &outputState)
 {
+  // to global IMU system
   double timeDiff = (_scanTime - _imuHistory[_imuIdx].stamp).toSec() + relTime;
   while (_imuIdx < _imuHistory.size() - 1 && timeDiff > 0) {
     _imuIdx++;
@@ -336,7 +337,7 @@ void ScanRegistration::extractFeatures(const uint16_t& beginIdx)
     size_t scanStartIdx = _scanIndices[i].first;
     size_t scanEndIdx = _scanIndices[i].second;
 
-    // skip empty scans
+    // skip empty scans,少于2*5个点跳过
     if (scanEndIdx <= scanStartIdx + 2 * _config.curvatureRegion) {
       continue;
     }
@@ -350,7 +351,7 @@ void ScanRegistration::extractFeatures(const uint16_t& beginIdx)
     // reset scan buffers
     setScanBuffersFor(scanStartIdx, scanEndIdx);
 
-    // extract features from equally sized scan regions
+    // extract features from equally sized scan regions，分段进行处理
     for (int j = 0; j < _config.nFeatureRegions; j++) {
       size_t sp = ((scanStartIdx + _config.curvatureRegion) * (_config.nFeatureRegions - j)
                    + (scanEndIdx - _config.curvatureRegion) * j) / _config.nFeatureRegions;
