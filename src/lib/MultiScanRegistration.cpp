@@ -179,7 +179,7 @@ void MultiScanRegistration::process(const pcl::PointCloud<pcl::PointXYZ>& laserC
 
   // extract valid points from input cloud
   for (int i = 0; i < cloudSize; i++) {
-    //交换坐标系，y向前，z向左，x向上；猜测为了和单线旋转lidar一致
+    //交换坐标系，z朝前，y向上，x向左；猜测为了和单线旋转lidar一致
     point.x = laserCloudIn[i].y;
     point.y = laserCloudIn[i].z;
     point.z = laserCloudIn[i].x;

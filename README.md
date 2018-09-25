@@ -40,3 +40,7 @@ roslaunch velodyne_pointcloud VLP16_points.launch pcap:="/home/laboshinl/Downloa
 -----------------------------2018.8.12
 1、gdb 调试：launch-prefix="xterm -e gdb --args"
 2.可对库文件进行调试.
+-----------------------------2018.9.18
+1,evaluation
+evo_traj kitti '/media/whu/HD_CHEN_2T/02data/slam_3rd_data/loam/loam_KITTI/KITTI_03_LOAM.txt' 
+--ref='/media/whu/HD_CHEN_2T/02data/KITTI_odometry/dataset/poses/03.txt'  -p --plot_mode=xz

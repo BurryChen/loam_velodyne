@@ -57,7 +57,12 @@ TransformMaintenance::TransformMaintenance()
     _transformMapped[i] = 0;
     _transformBefMapped[i] = 0;
     _transformAftMapped[i] = 0;
-  }
+  }  
+}
+
+TransformMaintenance::~TransformMaintenance()
+{
+  fclose(fp);
 }
 
 
@@ -72,7 +77,24 @@ bool TransformMaintenance::setup(ros::NodeHandle &node, ros::NodeHandle &private
 
   _subOdomAftMapped = node.subscribe<nav_msgs::Odometry>
       ("/aft_mapped_to_init", 5, &TransformMaintenance::odomAftMappedHandler, this);
+  
+  fp = fopen("/home/whu/data/loam_KITTI/KITTI_0X_LOAM.txt","w");    
+  tf_velo2cam.setBasis(tf::Matrix3x3(   
+   4.276802385584e-04, -9.999672484946e-01, -8.084491683471e-03,
+  -7.210626507497e-03, 8.081198471645e-03, -9.999413164504e-01, 
+   9.999738645903e-01, 4.859485810390e-04, -7.206933692422e-03));
+  tf_velo2cam.setOrigin(tf::Vector3(-1.198459927713e-02,-5.403984729748e-02,-2.921968648686e-01)); 
+  tf_loamzj.setBasis(tf::Matrix3x3(0,0,1,1,0,0,0,1,0));
+  tf_loamzj.setOrigin(tf::Vector3(0,0,0)); 
 
+  //初值
+  tf::Matrix3x3 R(1,0,0,0,1,0,0,0,1);
+  //R=tf_velo2cam.getBasis()*R;
+  tf::Vector3 T(0,0,0);
+  fprintf(fp,"%le %le %le %le %le %le %le %le %le %le %le %le\n",
+	   R[0][0],R[0][1],R[0][2],T[0],
+	   R[1][0],R[1][1],R[1][2],T[1],
+	   R[2][0],R[2][1],R[2][2],T[2]);  
   return true;
 }
 
@@ -211,6 +233,16 @@ void TransformMaintenance::laserOdometryHandler(const nav_msgs::Odometry::ConstP
   _laserOdometryTrans2.setRotation(tf::Quaternion(-geoQuat.y, -geoQuat.z, geoQuat.x, geoQuat.w));
   _laserOdometryTrans2.setOrigin(tf::Vector3(_transformMapped[3], _transformMapped[4], _transformMapped[5]));
   _tfBroadcaster2.sendTransform(_laserOdometryTrans2);
+
+  //_laserOdometry2 _laserOdometryTrans2 在zhangji定义的坐标系下，
+  // tf_velo2cam*tf_loamzj=(-1,0,0,1,0,0,0,1,0)
+  tf::Matrix3x3 R= tf::Matrix3x3(tf::Quaternion(geoQuat.y, geoQuat.z, geoQuat.x, geoQuat.w)); //why,
+  //tf::Matrix3x3 R= tf::Matrix3x3(tf_velo2cam.getRotation()*tf_loamzj.getRotation()*_laserOdometryTrans2.getRotation());
+  tf::Vector3 T=tf_velo2cam*tf_loamzj*_laserOdometryTrans2.getOrigin();
+  fprintf(fp,"%le %le %le %le %le %le %le %le %le %le %le %le\n",
+	   R[0][0],R[0][1],R[0][2],T[0],
+	   R[1][0],R[1][1],R[1][2],T[1],
+	   R[2][0],R[2][1],R[2][2],T[2]);
 }
 
 

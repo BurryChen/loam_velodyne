@@ -38,6 +38,9 @@
 #include <nav_msgs/Odometry.h>
 #include <tf/transform_broadcaster.h>
 
+#include <iostream>
+#include <stdio.h>
+
 namespace loam {
 
 /** \brief Implementation of the LOAM transformation maintenance component.
@@ -46,6 +49,7 @@ namespace loam {
 class TransformMaintenance {
 public:
   TransformMaintenance();
+  ~TransformMaintenance();
 
   /** \brief Setup component.
    *
@@ -87,6 +91,9 @@ private:
 
   ros::Subscriber _subLaserOdometry;    ///< (high frequency) laser odometry subscriber
   ros::Subscriber _subOdomAftMapped;    ///< (low frequency) mapping odometry subscriber
+  
+  FILE *fp;                             /// pose file
+  tf::Transform tf_velo2cam,tf_loamzj;
 };
 
 } // end namespace loam
