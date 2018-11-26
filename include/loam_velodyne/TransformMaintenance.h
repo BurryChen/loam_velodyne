@@ -74,6 +74,7 @@ public:
 
 protected:
   void transformAssociateToMap();
+  void WriteOdom();
 
 
 private:
@@ -93,7 +94,8 @@ private:
   ros::Subscriber _subOdomAftMapped;    ///< (low frequency) mapping odometry subscriber
   
   FILE *fp;                             /// pose file
-  tf::Transform tf_velo2cam,tf_loamzj;
+  tf::Transform tf_velo2cam,tf_zj2velo;
+  ros::WallTime last_t;
 };
 
 } // end namespace loam

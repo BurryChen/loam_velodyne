@@ -138,7 +138,7 @@ protected:
 
 
 private:
-  static const int SYSTEM_DELAY = 0;//20;
+  static const int SYSTEM_DELAY = 1;//20;
 };
 
 } // end namespace loam

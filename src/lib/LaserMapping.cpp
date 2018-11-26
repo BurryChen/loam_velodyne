@@ -52,7 +52,7 @@ LaserMapping::LaserMapping(const float& scanPeriod,
                            const size_t& maxIterations)
       : _scanPeriod(scanPeriod),
         _stackFrameNum(1),
-        _mapFrameNum(5),
+        _mapFrameNum(10),//(5),
         _frameCount(0),
         _mapFrameCount(0),
         _maxIterations(maxIterations),

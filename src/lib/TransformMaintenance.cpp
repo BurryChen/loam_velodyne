@@ -78,14 +78,16 @@ bool TransformMaintenance::setup(ros::NodeHandle &node, ros::NodeHandle &private
   _subOdomAftMapped = node.subscribe<nav_msgs::Odometry>
       ("/aft_mapped_to_init", 5, &TransformMaintenance::odomAftMappedHandler, this);
   
-  fp = fopen("/home/whu/data/loam_KITTI/KITTI_0X_LOAM.txt","w");    
+  std::string odom_file; //pose file with KITTI calibration tf_cal 
+  odom_file = privateNode.param<std::string>("odom_file", "/home/whu/data/ndt_odom_KITTI/KITTI_0X_odom.txt"); 
+  fp = fopen(odom_file.c_str(),"w");    
   tf_velo2cam.setBasis(tf::Matrix3x3(   
    4.276802385584e-04, -9.999672484946e-01, -8.084491683471e-03,
   -7.210626507497e-03, 8.081198471645e-03, -9.999413164504e-01, 
    9.999738645903e-01, 4.859485810390e-04, -7.206933692422e-03));
   tf_velo2cam.setOrigin(tf::Vector3(-1.198459927713e-02,-5.403984729748e-02,-2.921968648686e-01)); 
-  tf_loamzj.setBasis(tf::Matrix3x3(0,0,1,1,0,0,0,1,0));
-  tf_loamzj.setOrigin(tf::Vector3(0,0,0)); 
+  tf_zj2velo.setBasis(tf::Matrix3x3(0,0,1,1,0,0,0,1,0));
+  tf_zj2velo.setOrigin(tf::Vector3(0,0,0)); 
 
   //初值
   tf::Matrix3x3 R(1,0,0,0,1,0,0,0,1);
@@ -94,7 +96,10 @@ bool TransformMaintenance::setup(ros::NodeHandle &node, ros::NodeHandle &private
   fprintf(fp,"%le %le %le %le %le %le %le %le %le %le %le %le\n",
 	   R[0][0],R[0][1],R[0][2],T[0],
 	   R[1][0],R[1][1],R[1][2],T[1],
-	   R[2][0],R[2][1],R[2][2],T[2]);  
+	   R[2][0],R[2][1],R[2][2],T[2]);
+
+  last_t = ros::WallTime::now();
+  
   return true;
 }
 
@@ -227,22 +232,15 @@ void TransformMaintenance::laserOdometryHandler(const nav_msgs::Odometry::ConstP
   _laserOdometry2.pose.pose.position.y = _transformMapped[4];
   _laserOdometry2.pose.pose.position.z = _transformMapped[5];
   _pubLaserOdometry2.publish(_laserOdometry2);
-  //std::cerr << "_laserOdometry2: " << _laserOdometry2.pose.pose.position <<std::endl;
 
   _laserOdometryTrans2.stamp_ = laserOdometry->header.stamp;
   _laserOdometryTrans2.setRotation(tf::Quaternion(-geoQuat.y, -geoQuat.z, geoQuat.x, geoQuat.w));
   _laserOdometryTrans2.setOrigin(tf::Vector3(_transformMapped[3], _transformMapped[4], _transformMapped[5]));
   _tfBroadcaster2.sendTransform(_laserOdometryTrans2);
+  
+  //pose file with KITTI calibration tf_cal
+  WriteOdom();
 
-  //_laserOdometry2 _laserOdometryTrans2 在zhangji定义的坐标系下，
-  // tf_velo2cam*tf_loamzj=(-1,0,0,1,0,0,0,1,0)
-  tf::Matrix3x3 R= tf::Matrix3x3(tf::Quaternion(geoQuat.y, geoQuat.z, geoQuat.x, geoQuat.w)); //why,
-  //tf::Matrix3x3 R= tf::Matrix3x3(tf_velo2cam.getRotation()*tf_loamzj.getRotation()*_laserOdometryTrans2.getRotation());
-  tf::Vector3 T=tf_velo2cam*tf_loamzj*_laserOdometryTrans2.getOrigin();
-  fprintf(fp,"%le %le %le %le %le %le %le %le %le %le %le %le\n",
-	   R[0][0],R[0][1],R[0][2],T[0],
-	   R[1][0],R[1][1],R[1][2],T[1],
-	   R[2][0],R[2][1],R[2][2],T[2]);
 }
 
 
@@ -268,6 +266,31 @@ void TransformMaintenance::odomAftMappedHandler(const nav_msgs::Odometry::ConstP
   _transformBefMapped[3] = odomAftMapped->twist.twist.linear.x;
   _transformBefMapped[4] = odomAftMapped->twist.twist.linear.y;
   _transformBefMapped[5] = odomAftMapped->twist.twist.linear.z;
+}
+
+
+/**
+* @brief  write odom file,
+* @return void
+*/
+void TransformMaintenance::WriteOdom()
+{
+  //laserOdometryTrans2 is in the zj frame
+  tf::Transform odom_velo= tf_zj2velo*_laserOdometryTrans2*tf_zj2velo.inverse();
+  tf::Transform odom_cam=tf_velo2cam*odom_velo*tf_velo2cam.inverse();
+  tf::Matrix3x3 R= odom_cam.getBasis();
+  tf::Vector3 T=odom_cam.getOrigin();
+  fprintf(fp,"%le %le %le %le %le %le %le %le %le %le %le %le\n",
+	   R[0][0],R[0][1],R[0][2],T[0],
+	   R[1][0],R[1][1],R[1][2],T[1],
+	   R[2][0],R[2][1],R[2][2],T[2]);
+  
+  //screet print 
+  ros::WallTime t2 = ros::WallTime::now();
+  ros::Time stamp=_laserOdometryTrans2.stamp_;
+  std::cout <<" "<< stamp<< "--t: " << (t2 - last_t).toSec() <<std::endl;
+  last_t=t2;
+    
 }
 
 } // end namespace loam

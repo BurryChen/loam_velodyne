@@ -6,10 +6,10 @@
   <!--<arg name="odom_file" value="/home/whu/data/loam_KITTI/KITTI_0X_odom.txt" /-->
 
   <node pkg="loam_velodyne" type="multiScanRegistration" name="multiScanRegistration" output="screen">
-    <param name="lidar" value="HDL-64E" /> <!-- options: VLP-16  HDL-32  HDL-64E -->
+    <param name="lidar" value="HDL-32" /> <!-- options: VLP-16  HDL-32  HDL-64E -->
     <param name="scanPeriod" value="$(arg scanPeriod)" />
 
-    <remap from="/multi_scan_points" to="/velodyne_points" />
+    <remap from="/multi_scan_points" to="/velodyne_32E_3d" />
     <remap from="/imu/data2" to="/imu/data" />
   </node>
 
@@ -22,7 +22,6 @@
   </node>
 
   <node pkg="loam_velodyne" type="transformMaintenance" name="transformMaintenance" output="screen">
-    <param name="odom_file" value="$(arg odom_file)" />     <!--odom file-->
   </node>
 <!--
   <group if="$(arg rviz)">
@@ -30,3 +29,4 @@
   </group>
 -->
 </launch>
+
